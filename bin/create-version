@@ -1,0 +1,100 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'optparse'
+require 'git'
+
+class Version
+  attr_reader :version, :major, :minor, :patch
+  attr_accessor :remote, :directory, :start
+
+  def initialize(options={})
+    @version   = options[:version]
+    @directory = options[:directory]
+    @remote    = options[:remote]
+    @start     = options[:start]
+  end
+
+  def repo(options={})
+    Git.open(directory, options)
+  end
+
+  def fetch!
+    repo.remote(remote).fetch
+  end
+
+  def remote_exists?
+    repo.remotes.map(&:name).include?(remote)
+  end
+
+  def version_exists?
+    !repo.branches["remotes/#{remote}/#{version}"].nil?
+  end
+
+  def create!
+    repo.checkout(start, new_branch: version)
+    File.open(File.join(directory, "VERSION"), 'wb'){ |f| f.puts(version) }
+    repo.add("VERSION")
+    repo.commit("Bump version to #{version}")
+    repo.push(repo.remote(remote), version)
+    repo.checkout(version, new_branch: "#{version}-edge")
+    repo.push(repo.remote(remote), "#{version}-edge")
+  end
+
+  def to_s
+    self.version.to_s
+  end
+end
+
+if $0 == __FILE__
+  $version = Version.new(version: ARGV[-1], directory: ENV['PWD'], remote: 'origin', start: 'master')
+
+  optparse = OptionParser.new do |opts|
+    opts.banner = <<-EOS
+    Usage: #{File.basename(__FILE__)} [options] version
+
+    This will bootstrap a new version by creating x.x.x and
+    x.x.x-edge branches as well as creating a single commit
+    to write the new version number to the VERSION file.
+
+    EOS
+
+    opts.on('-r', '--remote', "Specify on which remote to create the branches (default: origin)") do |remote|
+      $version.remote = remote
+    end
+
+    opts.on('-d', '--directory', "Specify the root directory of the repository (default: present working directory)") do |dir|
+      $version.directory = File.expand_path(dir, File.dirname(__FILE__))
+    end
+
+    opts.on('-s', '--start', "Branch to use as the starting point for the new version (default: master)") do |start|
+      $version.start = start
+    end
+
+    opts.on('-h', '--help', "Display this screen") do
+      puts opts
+      exit
+    end
+  end
+
+  optparse.parse
+
+  if $version.version.nil?
+    puts optparse
+    exit
+  end
+
+  if $version.remote_exists?
+    $version.repo.branch($version.start).checkout
+    $version.fetch!
+  else
+    $stderr.puts "ERROR: #{$version.remote} doesn't exist!"
+  end
+
+  unless $version.version_exists?
+    $version.create!
+    $stdout.puts "Created version #{$version}!"
+  else
+    $stderr.puts "ERROR: Version #{$version} already exists!"
+  end
+end
