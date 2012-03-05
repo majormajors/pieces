@@ -1,0 +1,53 @@
+#!/usr/bin/env ruby
+
+require "rubygems"
+require "optparse"
+
+$prompt = true
+
+INSTANCE_ID = ARGV[-1]
+COMMANDS = [ "knife client delete %s -y",
+             "knife node delete %s -y",
+             "knife ec2 server delete %s -y" ]
+
+ASK_PROC = Proc.new do
+  $stdout.puts "Are you *sure*? This is very destructive! (y/n): "
+  answer = $stdin.getc
+  exit unless ['y','Y'].include?(answer)
+end
+
+DELETE_PROC = Proc.new do
+  COMMANDS.each do |command|
+    system(command % INSTANCE_ID)
+  end
+end
+
+optparse = OptionParser.new do |opts|
+  opts.banner = <<-EOS
+  Usage: #{File.basename(__FILE__)} [options] instance_id
+
+  This will execute knife commands to delete the client
+  and node for a given instance in the Chef server and
+  finally terminate the instance completely. This is 
+  destructive and irreversible.
+  EOS
+
+  opts.on('-h', '--help', "Display this message") do
+    puts opts
+    exit
+  end
+
+  opts.on('-y', '--yes', "Do not prompt for confirmation") do
+    $prompt = false
+  end
+end
+
+optparse.parse!
+
+if INSTANCE_ID.nil? || INSTANCE_ID.empty? || INSTANCE_ID =~ /^-/
+  puts optparse
+  exit
+end
+
+ASK_PROC.call if $prompt
+DELETE_PROC.call
