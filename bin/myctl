@@ -1,0 +1,22 @@
+#!/bin/bash
+
+plist=$HOME/Library/LaunchAgents/homebrew.mxcl.mysql.plist
+
+start()   { launchctl load -w $plist; }
+stop()    { launchctl unload -w $plist; }
+restart() { stop && start; }
+
+case $1 in
+  start)
+    echo "Starting MySQL..."
+    start
+    ;;
+  stop)
+    echo "Stopping MySQL..."
+    stop
+    ;;
+  restart)
+    echo "Restarting MySQL..."
+    restart
+    ;;
+esac
